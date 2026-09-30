@@ -1,10 +1,11 @@
 "use client";
 import { useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { CalendarDays, ChevronDown, Clock3, Flag, FolderKanban, Pencil, Plus, Search, Trophy } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { type Entry, type ProgressLog, closed, dayDiff, today } from "@/lib/model";
 import { heatmapDays } from "@/lib/journey";
-import { matchesAiFilter } from "@/lib/ai-contract";
+import { entriesForAiSurface } from "@/lib/ai-contract";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -26,12 +27,18 @@ export function KindIcon({ kind, className }: { kind: Entry["kind"]; className?:
 
 export default function ProjectsView() {
   const { data, newEntry, aiFilter, applyAiFilter } = useDesk();
+  const params = useSearchParams();
+  const urlQuery = params.get("q") || "";
+  const urlKind = params.get("kind");
+  const initialKind = urlKind === "project" || urlKind === "competition" ? urlKind : "all";
+  const [linkedQuery, setLinkedQuery] = useState(urlQuery), [linkedKind, setLinkedKind] = useState(initialKind);
   const thisYear = Number(today().slice(0, 4));
-  const [kind, setKind] = useState<"all" | "project" | "competition">("all");
-  const [query, setQuery] = useState(""), [year, setYear] = useState(thisYear), [onlyActive, setOnlyActive] = useState(true), [progress, setProgress] = useState<ProgressDraft | null>(null);
+  const [kind, setKind] = useState<"all" | "project" | "competition">(initialKind);
+  const [query, setQuery] = useState(urlQuery), [year, setYear] = useState(thisYear), [onlyActive, setOnlyActive] = useState(true), [progress, setProgress] = useState<ProgressDraft | null>(null);
+  if (urlQuery !== linkedQuery || urlKind !== linkedKind) { setLinkedQuery(urlQuery); setQuery(urlQuery); setLinkedKind(urlKind === "project" || urlKind === "competition" ? urlKind : "all"); setKind(urlKind === "project" || urlKind === "competition" ? urlKind : "all"); }
   const all = data.entries.filter(isTrack);
   const aiActive = aiFilter && (aiFilter.kind === "competition" || aiFilter.kind === "project");
-  const items = all.filter(e => (kind === "all" || e.kind === kind) && (!aiActive || (aiFilter!.ids ? aiFilter!.ids.includes(e.id) : matchesAiFilter(e, aiFilter!))) && (!onlyActive || !closed(e))
+  const items = entriesForAiSurface(all, "tracks", aiActive ? aiFilter : null).filter(e => (kind === "all" || e.kind === kind) && (!aiActive || !aiFilter!.ids || aiFilter!.ids.includes(e.id)) && (!onlyActive || !closed(e))
     && [e.title, e.organization, e.notes].join(" ").toLowerCase().includes(query.toLowerCase()))
     .sort((a, b) => lastActivity(b).localeCompare(lastActivity(a)));
   const years = [...new Set([thisYear, year, ...all.flatMap(e => e.progress.map(p => Number(p.date.slice(0, 4))))])].sort((a, b) => b - a);
